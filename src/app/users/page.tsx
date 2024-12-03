@@ -6,13 +6,14 @@ import {
   useReactTable,
   getCoreRowModel,
   getPaginationRowModel,
+  getFilteredRowModel,
 } from "@tanstack/react-table";
 import React, { useEffect, useState } from "react";
 import PageTitle from "@/components/PageTitle";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Trash2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchUsers, deleteUser, updateUser, type APIUser } from "@/lib/api";
-import Modal from "@/components/Modal"; // Import the Modal component
+import Modal from "@/components/Modal";
 import { Loader2 } from "lucide-react";
 
 type Props = {};
@@ -24,6 +25,7 @@ type User = {
   creditScore: number;
   country: string;
 };
+
 const COUNTRY_TO_FLAG: { [key: string]: string } = {
   uk: "🇬🇧",
   england: "🇬🇧",
@@ -58,18 +60,15 @@ const COUNTRY_TO_FLAG: { [key: string]: string } = {
 export default function UsersPage({}: Props) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false); // To control the modal visibility
-  const [selectedUser, setSelectedUser] = useState<User | null>(null); // To store selected user for editing
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // Function to transform API data to table format
   const transformApiData = (apiUsers: APIUser[]): User[] => {
-    // Sort the array in reverse order (newest first) before transforming
     const sortedUsers = [...apiUsers].reverse();
-
     return sortedUsers.map((user) => {
       const country = user.country?.toLowerCase() || "";
       const displayCountry = country.charAt(0).toUpperCase() + country.slice(1);
-
       return {
         id: user.customer_id,
         name: `${user.first_name} ${user.last_name}`,
@@ -80,6 +79,10 @@ export default function UsersPage({}: Props) {
       };
     });
   };
+
+const filteredUsers = users.filter(user =>
+  user.name.toLowerCase().includes(searchTerm.toLowerCase())
+);
 
   const columns: ColumnDef<User>[] = [
     {
@@ -93,7 +96,7 @@ export default function UsersPage({}: Props) {
               src={`https://api.dicebear.com/9.x/glass/svg?seed=${row.getValue("name")}`}
               alt="user-image"
             />
-            <p>{row.getValue("name")} </p>
+            <p>{row.getValue("name")}</p>
           </div>
         );
       },
@@ -135,17 +138,16 @@ export default function UsersPage({}: Props) {
       header: "Actions",
       cell: ({ row }) => {
         const handleEdit = (user: User) => {
-          setSelectedUser(user); // Set selected user data
-          setIsModalOpen(true); // Open the modal
+          setSelectedUser(user);
+          setIsModalOpen(true);
         };
 
         const handleDelete = async (id: string) => {
           const customerId = row.original.id;
-
           if (window.confirm("Are you sure you want to delete this user?")) {
             try {
               await deleteUser(customerId);
-              setUsers(users.filter((user) => user.id !== customerId)); // Remove user from state after deletion
+              setUsers(users.filter((user) => user.id !== customerId));
             } catch (error) {
               console.error("Failed to delete user:", error);
             }
@@ -176,24 +178,26 @@ export default function UsersPage({}: Props) {
     },
   ];
 
-  const table = useReactTable({
-    data: users,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
+const table = useReactTable({
+  data: users,
+  columns,
+  getCoreRowModel: getCoreRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  state: {
+    globalFilter: searchTerm,
+  },
+  onGlobalFilterChange: setSearchTerm,
+  initialState: {
+    pagination: {
+      pageSize: 10,
     },
-  });
+  },
+});
 
   const handleSaveUser = async (updatedUser: any) => {
     try {
-      // Call the updateUser function from your API
       await updateUser(updatedUser);
-
-      // Update the local state after successful API call
       setUsers((prevUsers) =>
         prevUsers.map((user) => {
           if (user.id === updatedUser.customer_id) {
@@ -203,17 +207,23 @@ export default function UsersPage({}: Props) {
               email: updatedUser.email,
               balance: `$${updatedUser.balance.toLocaleString()}`,
               creditScore: updatedUser.credit_score,
-              country: `${updatedUser.country.charAt(0).toUpperCase() + updatedUser.country.slice(1)} ${COUNTRY_TO_FLAG[updatedUser.country.toLowerCase()] || "🗺️"}`,
+              country: `${
+                updatedUser.country.charAt(0).toUpperCase() +
+                updatedUser.country.slice(1)
+              } ${
+                COUNTRY_TO_FLAG[updatedUser.country.toLowerCase()] || "🗺️"
+              }`,
             };
           }
           return user;
-        }),
+        })
       );
     } catch (error) {
       console.error("Error updating user:", error);
       alert("Failed to update user. Please try again.");
     }
   };
+
   useEffect(() => {
     async function loadUsers() {
       try {
@@ -226,7 +236,6 @@ export default function UsersPage({}: Props) {
         setLoading(false);
       }
     }
-
     loadUsers();
   }, []);
 
@@ -242,28 +251,39 @@ export default function UsersPage({}: Props) {
     <div className="flex w-full flex-col gap-5">
       <div className="flex items-center justify-between">
         <PageTitle title="Users" />
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-10 rounded-md border border-gray-200 pl-8 pr-4 focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </div>
       <DataTable columns={columns} data={users} table={table} />
 
-      {/* Modal component */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
