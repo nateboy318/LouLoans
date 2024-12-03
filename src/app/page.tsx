@@ -44,7 +44,8 @@ const COUNTRY_TO_FLAG: { [key: string]: string } = {
   mexico: "🇲🇽",
 };
 
-type User = {
+interface User {
+  customer_id: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -53,42 +54,68 @@ type User = {
   balance: number;
   credit_score: number;
   country: string;
-};
+}
+
+interface CountryScore {
+  totalScore: number;
+  count: number;
+}
+
+interface BalanceStats {
+  [key: string]: CountryScore;
+}
+
+interface Stats {
+  totalUsers: number;
+  highestBalance: number;
+  averageCreditScore: number;
+  mostCommonCountry: string;
+  mostCommonCountryFlag: string;
+}
 
 export default function Home() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     totalUsers: 0,
     highestBalance: 0,
     averageCreditScore: 0,
     mostCommonCountry: "N/A",
-    mostCommonCountryFlag: "🗺️", // Add flag state
+    mostCommonCountryFlag: "🗺️",
   });
-  const [radarData, setRadarData] = useState<any[]>([]);
+  const [radarData, setRadarData] = useState<
+    Array<{
+      subject: string;
+      score: number;
+      max: number;
+    }>
+  >([]);
 
   useEffect(() => {
     async function loadUsers() {
       try {
         const data = await fetchUsers();
-        setUsers(data);
+        const sortedUsers = [...data].sort(
+          (a: User, b: User) => Number(b.customer_id) - Number(a.customer_id),
+        );
+        setUsers(sortedUsers);
 
-        // Calculate stats from the data
-        const balances = data.map((user) => user.balance || 0);
-        const countries = data.map((user) => user.country || "Unknown");
-        const creditScores = data.map((user) => user.credit_score || 0);
+        const balances = data.map((user: User) => user.balance || 0);
+        const countries = data.map((user: User) => user.country || "Unknown");
+        const creditScores = data.map((user: User) => user.credit_score || 0);
 
-        // Find most common country
-        const countryFrequency = countries.reduce((acc, country) => {
-          acc[country] = (acc[country] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
+        const countryFrequency: Record<string, number> = countries.reduce(
+          (acc: Record<string, number>, country: string) => {
+            acc[country] = (acc[country] || 0) + 1;
+            return acc;
+          },
+          {},
+        );
 
         const mostCommonCountry = Object.entries(countryFrequency).sort(
-          ([, a], [, b]) => b - a
+          ([, a], [, b]) => b - a,
         )[0][0];
 
-        // Get the flag for the most common country
         const mostCommonCountryFlag =
           COUNTRY_TO_FLAG[mostCommonCountry.toLowerCase()] || "🗺️";
 
@@ -96,14 +123,14 @@ export default function Home() {
           totalUsers: data.length,
           highestBalance: Math.max(...balances),
           averageCreditScore: Math.round(
-            creditScores.reduce((a, b) => a + b, 0) / data.length
+            creditScores.reduce((a: number, b: number) => a + b, 0) /
+              data.length,
           ),
           mostCommonCountry,
-          mostCommonCountryFlag, // Set the flag
+          mostCommonCountryFlag,
         });
 
-        // Prepare radar data
-        const countryScores = data.reduce((acc, user) => {
+        const countryScores = data.reduce((acc: BalanceStats, user: User) => {
           if (user.country && user.credit_score) {
             if (!acc[user.country]) {
               acc[user.country] = { totalScore: 0, count: 0 };
@@ -112,24 +139,21 @@ export default function Home() {
             acc[user.country].count += 1;
           }
           return acc;
-        }, {});
+        }, {} as BalanceStats);
 
-        const averageScoresByCountry = Object.entries(countryScores).map(
-          ([country, { totalScore, count }]) => ({
-            country: `${country} ${
-              COUNTRY_TO_FLAG[country.toLowerCase()] || "🗺️"
-            }`,
-            averageCreditScore: totalScore / count,
-          })
-        );
+        const averageScoresByCountry = Object.entries(
+          countryScores as BalanceStats,
+        ).map(([country, scores]) => ({
+          country: `${country} ${COUNTRY_TO_FLAG[country.toLowerCase()] || "🗺️"}`,
+          averageCreditScore: scores.totalScore / scores.count,
+        }));
 
-        // Format radar data
         const radarFormattedData = averageScoresByCountry.map(
           ({ country, averageCreditScore }) => ({
             subject: country,
             score: averageCreditScore,
-            max: 800, // Set max credit score (you can adjust as needed)
-          })
+            max: 800,
+          }),
         );
 
         setRadarData(radarFormattedData);
@@ -160,20 +184,20 @@ export default function Home() {
     },
     {
       label: "Average Credit Score",
-      amount: stats.averageCreditScore.toString(), // Show rounded average
+      amount: stats.averageCreditScore.toString(),
       description: "Average user credit score",
       icon: BadgePercent,
     },
     {
       label: "Most Common Country",
-      amount: `${stats.mostCommonCountry} ${stats.mostCommonCountryFlag}`, // Add flag here
+      amount: `${stats.mostCommonCountry} ${stats.mostCommonCountryFlag}`,
       description: "Popular location",
       icon: Flag,
     },
   ];
 
   return (
-    <div className="flex flex-col gap-5 w-full">
+    <div className="flex w-full flex-col gap-5">
       <PageTitle title="Dashboard" />
 
       <section className="grid w-full grid-cols-1 gap-4 gap-x-8 transition-all sm:grid-cols-2 xl:grid-cols-4">
@@ -181,7 +205,7 @@ export default function Home() {
           <Card
             key={index}
             amount={data.amount}
-            description={data.description}
+            discription={data.description}
             icon={data.icon}
             label={data.label}
           />
@@ -191,14 +215,14 @@ export default function Home() {
       <section className="grid grid-cols-1 gap-4 transition-all lg:grid-cols-2">
         <CardContent>
           <div>
-            <p className="font-semibold mb-4">
+            <p className="mb-4 font-semibold">
               Average Credit Score by Country
             </p>
-            <div className="h-[350px] flex items-center justify-center">
+            <div className="flex h-[350px] items-center justify-center">
               {loading ? (
                 "Loading credit score data..."
               ) : radarData.length > 0 ? (
-                <RadarChart width={700} height={500} data={radarData}>
+                <RadarChart width={700} height={400} data={radarData}>
                   <PolarGrid />
                   <PolarAngleAxis dataKey="subject" />
                   <Radar
@@ -218,15 +242,15 @@ export default function Home() {
 
         <CardContent>
           <section>
-            <p className="font-semibold mb-4">Recent Created Users</p>
-            <div className="flex flex-col gap-4 max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <p className="mb-4 font-semibold">Recent Created Users</p>
+            <div className="flex max-h-[350px] flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-gray-100 scrollbar-thumb-gray-300">
               {loading ? (
-                <div className="text-center py-4">Loading users...</div>
+                <div className="py-4 text-center">Loading users...</div>
               ) : (
                 users.slice(0, 10).map((user, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-4 border-b hover:bg-gray-50 transition-colors"
+                    className="flex items-center justify-between border-b p-4 transition-colors hover:bg-gray-50"
                   >
                     <div className="flex items-center gap-4">
                       <img
@@ -241,7 +265,7 @@ export default function Home() {
                     </div>
                     <div className="text-sm">
                       <p className="text-gray-500">{user.phone}</p>
-                      <p className="text-right text-gray-400 text-xs">
+                      <p className="text-right text-xs text-gray-400">
                         Credit Score: {user.credit_score || "N/A"}
                       </p>
                     </div>

@@ -2,13 +2,18 @@
 
 import { DataTable } from "@/components/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
-import { useReactTable, getCoreRowModel, getPaginationRowModel } from "@tanstack/react-table";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getPaginationRowModel,
+} from "@tanstack/react-table";
 import React, { useEffect, useState } from "react";
 import PageTitle from "@/components/PageTitle";
 import { Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchUsers, deleteUser, updateUser, type APIUser } from "@/lib/api";
 import Modal from "@/components/Modal"; // Import the Modal component
+import { Loader2 } from "lucide-react";
 
 type Props = {};
 type User = {
@@ -58,17 +63,20 @@ export default function UsersPage({}: Props) {
 
   // Function to transform API data to table format
   const transformApiData = (apiUsers: APIUser[]): User[] => {
-    return apiUsers.map(user => {
-      const country = user.country?.toLowerCase() || '';
+    // Sort the array in reverse order (newest first) before transforming
+    const sortedUsers = [...apiUsers].reverse();
+
+    return sortedUsers.map((user) => {
+      const country = user.country?.toLowerCase() || "";
       const displayCountry = country.charAt(0).toUpperCase() + country.slice(1);
-      
+
       return {
         id: user.customer_id,
         name: `${user.first_name} ${user.last_name}`,
         email: user.email,
-        balance: user.balance ? `$${user.balance.toLocaleString()}` : '$0',
+        balance: user.balance ? `$${user.balance.toLocaleString()}` : "$0",
         creditScore: user.credit_score || 0,
-        country: `${displayCountry} ${COUNTRY_TO_FLAG[country] || '🗺️'}`,
+        country: `${displayCountry} ${COUNTRY_TO_FLAG[country] || "🗺️"}`,
       };
     });
   };
@@ -79,7 +87,7 @@ export default function UsersPage({}: Props) {
       header: "Name",
       cell: ({ row }) => {
         return (
-          <div className="flex gap-4 items-center">
+          <div className="flex items-center gap-4">
             <img
               className="h-8 w-8"
               src={`https://api.dicebear.com/9.x/glass/svg?seed=${row.getValue("name")}`}
@@ -114,7 +122,7 @@ export default function UsersPage({}: Props) {
       header: "Country",
       cell: ({ row }) => {
         const value = row.getValue("country") as string;
-        const [country, flag] = value.split(' ');
+        const [country, flag] = value.split(" ");
         return (
           <div className="flex items-center gap-2">
             <span className="text-2xl">{flag}</span>
@@ -131,15 +139,15 @@ export default function UsersPage({}: Props) {
           setIsModalOpen(true); // Open the modal
         };
 
-        const handleDelete = async () => {
+        const handleDelete = async (id: string) => {
           const customerId = row.original.id;
-        
-          if (window.confirm('Are you sure you want to delete this user?')) {
+
+          if (window.confirm("Are you sure you want to delete this user?")) {
             try {
               await deleteUser(customerId);
-              setUsers(users.filter(user => user.id !== customerId));  // Remove user from state after deletion
+              setUsers(users.filter((user) => user.id !== customerId)); // Remove user from state after deletion
             } catch (error) {
-              console.error('Failed to delete user:', error);
+              console.error("Failed to delete user:", error);
             }
           }
         };
@@ -180,17 +188,32 @@ export default function UsersPage({}: Props) {
     },
   });
 
-  const handleSaveUser = async (updatedUser: User) => {
+  const handleSaveUser = async (updatedUser: any) => {
     try {
-      // Call updateUser API here to update user data
+      // Call the updateUser function from your API
       await updateUser(updatedUser);
-      // Update local state with the modified user
-      setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
+
+      // Update the local state after successful API call
+      setUsers((prevUsers) =>
+        prevUsers.map((user) => {
+          if (user.id === updatedUser.customer_id) {
+            return {
+              ...user,
+              name: `${updatedUser.first_name} ${updatedUser.last_name}`,
+              email: updatedUser.email,
+              balance: `$${updatedUser.balance.toLocaleString()}`,
+              creditScore: updatedUser.credit_score,
+              country: `${updatedUser.country.charAt(0).toUpperCase() + updatedUser.country.slice(1)} ${COUNTRY_TO_FLAG[updatedUser.country.toLowerCase()] || "🗺️"}`,
+            };
+          }
+          return user;
+        }),
+      );
     } catch (error) {
-      console.error('Failed to update user:', error);
+      console.error("Error updating user:", error);
+      alert("Failed to update user. Please try again.");
     }
   };
-
   useEffect(() => {
     async function loadUsers() {
       try {
@@ -198,7 +221,7 @@ export default function UsersPage({}: Props) {
         const transformedUsers = transformApiData(data);
         setUsers(transformedUsers);
       } catch (error) {
-        console.error('Failed to load users:', error);
+        console.error("Failed to load users:", error);
       } finally {
         setLoading(false);
       }
@@ -208,11 +231,15 @@ export default function UsersPage({}: Props) {
   }, []);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex h-[calc(100vh-4rem)] w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-5 w-full">
+    <div className="flex w-full flex-col gap-5">
       <div className="flex items-center justify-between">
         <PageTitle title="Users" />
         <div className="flex items-center space-x-2">
@@ -235,12 +262,21 @@ export default function UsersPage({}: Props) {
         </div>
       </div>
       <DataTable columns={columns} data={users} table={table} />
-      
+
       {/* Modal component */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        userData={selectedUser || {}}
+        userData={
+          selectedUser || {
+            id: "",
+            name: "",
+            email: "",
+            balance: "",
+            creditScore: 0,
+            country: "",
+          }
+        }
         onSave={handleSaveUser}
       />
     </div>

@@ -20,15 +20,15 @@ export default function RootLayout({
     <html lang="en">
       <body
         className={cn(
-          "min-h-screen w-full bg-white text-black flex",
+          "flex min-h-screen w-full bg-white text-black",
           inter.className,
-          { "debug-screens": process.env.NODE_ENV === "development" }
+          { "debug-screens": process.env.NODE_ENV === "development" },
         )}
       >
         {/* Sidebar */}
         <Sidebar />
         {/* main page */}
-        <div className="p-8 w-full">{children}</div>
+        <div className="w-full p-8">{children}</div>
       </body>
     </html>
   );
